@@ -1,70 +1,154 @@
 class PHM():
     def __init__(self):
+        """ Initializes PHM by setting up the informativeness order and p_entailment definitions.
+
+        """
+
         self.informativeness_order = ['A', 'I', 'E', 'O']
-        self.p_entailments = {
-            'A': 'I',
-            'E': 'O',
-            'O': 'I',
-            'I': 'O'
-        }
+        self.p_entailments = {'A': 'I', 'E': 'O', 'O': 'I', 'I': 'O'}
 
-    def more_informative_than(self, quant1, quant2):
-        idx1 = self.informativeness_order.index(quant1)
-        idx2 = self.informativeness_order.index(quant2)
+    @staticmethod
+    def get_premises(task_enc):
+        """ Extracts premises from a given syllogistic task encoding.
 
-        if idx1 <= idx2:
-            return True
-        return False
+        Parameters
+        ----------
+        task_enc : str
+            Syllogistic task encoding (e.g., 'AA1', 'OE4', etc.). Note that the encodings follow
+            the specification of Khemlani & Johnson-Laird (2012) which use different numbers for
+            the syllogistic figures.
 
-    def min_heuristic(self, premise_quants):
-        quant1, quant2 = premise_quants
+        Returns
+        -------
+        prem1, prem2 : list(str)
+            Tuple representations for both premises. Each contains three elements: quantifier and
+            two terms.
 
-        if self.more_informative_than(quant1, quant2):
-            return quant2
-        return quant1
+        """
 
-    def p_entails(self, quant):
-        if quant in self.p_entailments:
-            return self.p_entailments[quant]
-        return None
+        figure = int(task_enc[2])
 
-    def p_entailment(self, min_quant):
-        return self.p_entails(min_quant)
+        prem1 = None
+        prem2 = None
+        if figure == 1:
+            prem1 = [task_enc[0], 'A', 'B']
+            prem2 = [task_enc[1], 'B', 'C']
+        elif figure == 2:
+            prem1 = [task_enc[0], 'B', 'A']
+            prem2 = [task_enc[1], 'C', 'B']
+        elif figure == 3:
+            prem1 = [task_enc[0], 'A', 'B']
+            prem2 = [task_enc[1], 'C', 'B']
+        elif figure == 4:
+            prem1 = [task_enc[0], 'B', 'A']
+            prem2 = [task_enc[1], 'B', 'C']
 
-    def attachment(self, min_quant, task_enc):
-        # Treat Some not as Some (Oaksford, 2001)
-        min_quant = min_quant#.replace('O', 'I')
-        quant1, quant2 = task_enc[:-1]#.replace('O', 'I')
-        figure = int(task_enc[-1])
+        return prem1, prem2
 
-        # Direction cannot be inferred for double-syllogisms
-        if quant1 == quant2:
-            return ['ac', 'ca']
+    def noun_phrase(self, premise, khemlani=True):
+        """ Creates the noun phrase for a given premise.
 
-        if min_quant == quant1:
-            if figure % 2 == 1:
-                return ['ac']
-            return ['ca']
+        Parameters
+        ----------
+        premise : list(str)
+            Tuple representation of a syllogistic premise. First element denotes quantifier,
+            remaining two denote terms.
 
-        if min_quant == quant2:
-            if int(figure / 2) - 1 == 0:
-                return ['ca']
-            return ['ac']
+        khemlani : bool
+            Flag indicating whether Khemlani & Johnson-Laird's (2012) variant of PHM is to be used.
+            "Some not" is not changed to "Some" phrases in this case.
 
-        assert False, 'Shitness happened'
+        Returns
+        -------
+        list(str)
+            Two-element list containing the quantifier and subject term.
 
-    def predict(self, task):
-        quants = [task[0], task[1]]
+        """
 
-        min_quant = self.min_heuristic(quants)
-        p_ent = self.p_entailment(min_quant)
+        if khemlani:
+            return [premise[0], premise[1]]
+        else:
+            return [premise[0].replace('O', 'I'), premise[1]]
 
-        # Unsure how to proceed.
-        # Assumption 1: Attachment phrase only considers end-term (kill middle term)
-        # Assumption 2: Attachment only on min-conclusion
+    def gen_conclusions(self, quant, subject):
+        """ Generate the list of conclusions for a given quantifier and subject.
 
-        attachment_dir = self.attachment(min_quant, task)
+        Parameters
+        ----------
+        quant : str
+            Syllogistic quantifier (i.e., 'A', 'I', 'E', 'O')
 
-        min_concls = [min_quant + direction for direction in attachment_dir]
-        p_ent_concls = [p_ent + direction for direction in attachment_dir]
+        subject : str
+            Syllogistic subject (i.e., 'A', 'C') or None if not specified. In this case,
+            conclusions for both directions are returned.
+
+        Returns
+        -------
+        list(str)
+            List of conclusions.
+
+        """
+
+        if not subject:
+            return [quant + 'ac', quant + 'ca']
+        return [quant + subject.replace('A', 'ac').replace('C', 'ca')]
+
+    def predict(self, task_enc):
+        """ Computes the list of predictions for a given syllogistic task.
+
+        Premises
+        --------
+        task_enc : str
+            Syllogism to predict for (e.g., "AA1", "AA2", ...). Note that the encodings follow
+            the specification of Khemlani & Johnson-Laird (2012) which use different numbers for
+            the syllogistic figures.
+
+        Returns
+        -------
+        list(str)
+            List of predictions.
+
+        """
+
+        # Complete the premises
+        prem1, prem2 = self.get_premises(task_enc)
+
+        # Determine min and max premise
+        min_prem = prem1
+        max_prem = prem2
+        if self.informativeness_order.index(prem1[0]) < self.informativeness_order.index(prem2[0]):
+            min_prem = prem2
+            max_prem = prem1
+
+        # Obtain p-entailment quantifier
+        p_ent_quant = self.p_entailments[min_prem[0]]
+
+        # Compute direction via attachment
+        min_concl_cands = [[min_prem[0], 'A', 'C'], [min_prem[0], 'C', 'A']]
+        min_concl_cand_phrases = [self.noun_phrase(x) for x in min_concl_cands]
+
+        prem1_phrase = self.noun_phrase(prem1)
+        prem2_phrase = self.noun_phrase(prem2)
+        prem_phrases = [prem1_phrase, prem2_phrase]
+
+        subject = None
+        if prem1[0] == prem2[0]:
+            # If both premise quantifiers are equal, the direction cannot be inferred since
+            # min- and max-premises are unspecified
+            subject = None
+        elif min_concl_cand_phrases[0] == prem1_phrase and min_concl_cand_phrases[1] not in prem_phrases:
+            subject = min_concl_cand_phrases[0][1]
+        elif min_concl_cand_phrases[0] == prem2_phrase and min_concl_cand_phrases[1] not in prem_phrases:
+            subject = min_concl_cand_phrases[0][1]
+        elif min_concl_cand_phrases[1] == prem1_phrase and min_concl_cand_phrases[0] not in prem_phrases:
+            subject = min_concl_cand_phrases[1][1]
+        elif min_concl_cand_phrases[1] == prem2_phrase and min_concl_cand_phrases[0] not in prem_phrases:
+            subject = min_concl_cand_phrases[1][1]
+        else:
+            # Both or none match, use max premise subject as conclusion subject
+            subject = ''.join(max_prem[1:]).replace('B', '')
+
+        # Generate the conclusions
+        min_concls = self.gen_conclusions(min_prem[0], subject)
+        p_ent_concls = self.gen_conclusions(p_ent_quant, subject)
         return min_concls + p_ent_concls

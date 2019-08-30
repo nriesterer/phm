@@ -16,12 +16,18 @@ class KhemlaniTest(unittest.TestCase):
         import phm
         self.phm = phm.PHM()
 
-    def test_syllogisms(self):
+    def test_khemlani(self):
         for _, row in self.khemlani_df.iterrows():
             task = row['Syllogism']
             truth = row['Prediction'].split(';')
             preds = self.phm.predict(task)
             self.assertEqual(preds, truth, msg='Syllogism: {}'.format(task))
+
+    def test_oaksford2001(self):
+        task = 'IA1'
+        truth = ['Iac', 'Oac']
+        prediction = self.phm.predict(task)
+        self.assertEqual(prediction, truth, msg='Syllogism: {}'.format(task))
 
 if __name__ == '__main__':
     unittest.main()
