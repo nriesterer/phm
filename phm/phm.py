@@ -1,11 +1,12 @@
 class PHM():
     def __init__(self):
-        self.informativeness_order = [
-            'A',
-            'I',
-            'E',
-            'O'
-        ]
+        self.informativeness_order = ['A', 'I', 'E', 'O']
+        self.p_entailments = {
+            'A': 'I',
+            'E': 'O',
+            'O': 'I',
+            'I': 'O'
+        }
 
     def more_informative_than(self, quant1, quant2):
         idx1 = self.informativeness_order.index(quant1)
@@ -23,36 +24,34 @@ class PHM():
         return quant1
 
     def p_entails(self, quant):
-        p_entailments = {
-            'A': 'I',
-            'E': 'O',
-            'O': 'I',
-            'I': 'O'
-        }
-
-        if quant in p_entailments:
-            return p_entailments[quant]
+        if quant in self.p_entailments:
+            return self.p_entailments[quant]
         return None
 
     def p_entailment(self, min_quant):
         return self.p_entails(min_quant)
 
-    def attachment(self, min_quant, prem_quants):
-        prem1, prem2 = prem_quants
-        prem1 = prem1.replace('O', 'I')
-        prem2 = prem2.replace('O', 'I')
-        min_quant = min_quant.replace('O', 'I')
+    def attachment(self, min_quant, task_enc):
+        # Treat Some not as Some (Oaksford, 2001)
+        min_quant = min_quant#.replace('O', 'I')
+        quant1, quant2 = task_enc[:-1]#.replace('O', 'I')
+        figure = int(task_enc[-1])
 
-        if prem1 == prem2:
-            return None
+        # Direction cannot be inferred for double-syllogisms
+        if quant1 == quant2:
+            return ['ac', 'ca']
 
-        if min_quant == prem1:
-            return 'ac'
-        elif min_quant == prem2:
-            return 'ca'
+        if min_quant == quant1:
+            if figure % 2 == 1:
+                return ['ac']
+            return ['ca']
 
-        assert False, 'Attachment failure with min_quant={}, prem_quants={}'.format(min_quant, prem_quants)
-        return None
+        if min_quant == quant2:
+            if int(figure / 2) - 1 == 0:
+                return ['ca']
+            return ['ac']
+
+        assert False, 'Shitness happened'
 
     def predict(self, task):
         quants = [task[0], task[1]]
@@ -64,13 +63,8 @@ class PHM():
         # Assumption 1: Attachment phrase only considers end-term (kill middle term)
         # Assumption 2: Attachment only on min-conclusion
 
-        attachment_dir = self.attachment(min_quant, quants)
-        if attachment_dir:
-            return [min_quant + attachment_dir, p_ent + attachment_dir]
+        attachment_dir = self.attachment(min_quant, task)
 
-        return [min_quant + 'ac', min_quant + 'ca', p_ent + 'ac', p_ent + 'ca']
-
-import ccobra
-p = PHM()
-for syllog in ccobra.syllogistic.SYLLOGISMS:
-    print(syllog, p.predict(syllog))
+        min_concls = [min_quant + direction for direction in attachment_dir]
+        p_ent_concls = [p_ent + direction for direction in attachment_dir]
+        return min_concls + p_ent_concls
