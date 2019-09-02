@@ -1,0 +1,13 @@
+{
+    "data.train": "data/Ragni2016.csv",
+    "data.test": "data/Ragni2016.csv",
+    "corresponding_data": true,
+    "models": [
+        {"filename": "ccobra_phm.py", "override_name": "PHM-1999", "args": {"khemlani_phrase": true}},
+        {"filename": "ccobra_phm.py", "override_name": "PHM-2001", "args": {"khemlani_phrase": false}},
+        "/Users/riestern/Documents/research/ccobra/ccobra/benchmarks/syllogistic/models/2012-Khemlani/PHM/phmttt.py"
+    ],
+    "domain_encoders": {
+        "syllogistic": "%ccobra%/syllogistic/encoder_syl.py"
+    }
+}
