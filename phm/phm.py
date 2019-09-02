@@ -1,5 +1,5 @@
 class PHM():
-    def __init__(self, khemlani_phrase=True):
+    def __init__(self, khemlani_phrase=False):
         """ Initializes PHM by setting up the informativeness order and p_entailment definitions.
 
         Parameters
