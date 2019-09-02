@@ -1,8 +1,20 @@
 class PHM():
-    def __init__(self):
+    def __init__(self, khemlani_phrase=True):
         """ Initializes PHM by setting up the informativeness order and p_entailment definitions.
 
+        Parameters
+        ----------
+        khemlani_phrase : bool
+            Flag indicating whether Khemlani & Johnson-Laird's (2012) variant of PHM is to be used.
+            "Some not" is not changed to "Some" phrases in this case which is in accordance to
+            Chater & Oaksford (1999).
         """
+
+        # Flag indicating how noun phrases are constructed. In Oaksford & Chater (2001), "Some not"
+        # produces the same noun phrase as "Some". In order to reproduce Khemlani & Johnson-Laird's
+        # (2012) prediction table, they have to be considered distinct (which is in accordance to
+        # Chater & Oaksford, 1999).
+        self.khemlani_phrase = khemlani_phrase
 
         self.informativeness_order = ['A', 'I', 'E', 'O']
         self.p_entailments = {'A': 'I', 'E': 'O', 'O': 'I', 'I': 'O'}
@@ -45,7 +57,7 @@ class PHM():
 
         return prem1, prem2
 
-    def noun_phrase(self, premise, khemlani=True):
+    def noun_phrase(self, premise):
         """ Creates the noun phrase for a given premise.
 
         Parameters
@@ -54,10 +66,6 @@ class PHM():
             Tuple representation of a syllogistic premise. First element denotes quantifier,
             remaining two denote terms.
 
-        khemlani : bool
-            Flag indicating whether Khemlani & Johnson-Laird's (2012) variant of PHM is to be used.
-            "Some not" is not changed to "Some" phrases in this case.
-
         Returns
         -------
         list(str)
@@ -65,7 +73,7 @@ class PHM():
 
         """
 
-        if khemlani:
+        if self.khemlani_phrase:
             return [premise[0], premise[1]]
         else:
             return [premise[0].replace('O', 'I'), premise[1]]
