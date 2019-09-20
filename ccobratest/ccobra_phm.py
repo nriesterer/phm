@@ -16,29 +16,32 @@ def max_premise(task):
         return task[0]
 
 class PHMModel(ccobra.CCobraModel):
-    def __init__(self, name='PHM', khemlani_phrase=True, o_heur_enabled=True, max_heur_enabled=True):
+    def __init__(self, name='PHM', khemlani_phrase=True, o_heur_enabled=True, max_heur_enabled=True, direction_bias_enabled=True):
         super(PHMModel, self).__init__(name, ['syllogistic'], ['single-choice'])
         self.phm = phm.PHM(khemlani_phrase=khemlani_phrase)
 
         # Member variables
         self.o_heur_enabled = o_heur_enabled
         self.max_heur_enabled = max_heur_enabled
+        self.direction_bias_enabled = direction_bias_enabled
 
         # Individualization parameters
         self.p_entailment = 0
         self.direction_bias = 0
         self.o_confidence = 0
-        self.max_confidence = {'A': [0, 0], 'I': [0, 0], 'E': [0, 0], 'O': [0, 0]}
+        self.max_confidence = {'A': [0, 0.1], 'I': [0, 0.1], 'E': [0, 0.1], 'O': [0, 0.1]}
 
     def end_participant(self, subj_id, **kwargs):
-        print('Finalizing subject', subj_id)
-        print('   p_entailm:', self.p_entailment)
-        print('   direction:', self.direction_bias)
-        print('   o_confide:', self.o_confidence)
-        print('   max_confi:', self.max_confidence)
-        print()
+        # print('Finalizing subject', subj_id)
+        # print('   p_entailm:', self.p_entailment)
+        # print('   direction:', self.direction_bias)
+        # print('   o_confide:', self.o_confidence)
+        # print('   max_confi:', self.max_confidence)
+        # print()
+        pass
 
     def pre_train(self, data, **kwargs):
+        return
         dat = []
         for subj_data in data:
             for task_data in subj_data:
@@ -89,9 +92,11 @@ class PHMModel(ccobra.CCobraModel):
         if self.p_entailment > 0:
             preds = pent_concls
 
-        pred = preds[0]
-        if self.direction_bias < 0 and len(preds) == 2:
-            pred = preds[1]
+        pred = np.random.choice(preds)
+        if self.direction_bias_enabled:
+            pred = preds[0]
+            if self.direction_bias < 0 and len(preds) == 2:
+                pred = preds[1]
 
         return pred
 
@@ -113,6 +118,8 @@ class PHMModel(ccobra.CCobraModel):
         return ccobra.syllogistic.decode_response(pred, item.task)
 
     def adapt(self, item, truth, **kwargs):
+        return
+
         task_enc = ccobra.syllogistic.encode_task(item.task)
         truth_enc = ccobra.syllogistic.encode_response(truth, item.task)
 
