@@ -160,3 +160,15 @@ class PHM():
         min_concls = self.gen_conclusions(min_prem[0], subject)
         p_ent_concls = self.gen_conclusions(p_ent_quant, subject)
         return min_concls + p_ent_concls
+
+if __name__ == '__main__':
+    import ccobra
+
+    phm_nokjl = PHM(False)
+    phm_kjl = PHM(True)
+
+    print('Problem;NoKJL;KJL')
+    for syllog in ccobra.syllogistic.SYLLOGISMS:
+        nokjl = ','.join(phm_nokjl.predict(syllog))
+        kjl = ','.join(phm_kjl.predict(syllog))
+        print(';'.join([syllog, nokjl, kjl, str(nokjl == kjl)]))

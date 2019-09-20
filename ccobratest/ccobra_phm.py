@@ -16,7 +16,7 @@ def max_premise(task):
         return task[0]
 
 class PHMModel(ccobra.CCobraModel):
-    def __init__(self, name='PHM', khemlani_phrase=True, o_heur_enabled=True, max_heur_enabled=True, direction_bias_enabled=True):
+    def __init__(self, name='PHM', khemlani_phrase=True, o_heur_enabled=True, max_heur_enabled=True, direction_bias_enabled=True, grid_fit=False):
         super(PHMModel, self).__init__(name, ['syllogistic'], ['single-choice'])
         self.phm = phm.PHM(khemlani_phrase=khemlani_phrase)
 
@@ -24,24 +24,26 @@ class PHMModel(ccobra.CCobraModel):
         self.o_heur_enabled = o_heur_enabled
         self.max_heur_enabled = max_heur_enabled
         self.direction_bias_enabled = direction_bias_enabled
+        self.grid_fit = grid_fit
+
+        self.history = []
 
         # Individualization parameters
         self.p_entailment = 0
         self.direction_bias = 0
         self.o_confidence = 0
-        self.max_confidence = {'A': [0, 0.1], 'I': [0, 0.1], 'E': [0, 0.1], 'O': [0, 0.1]}
+        self.max_confidence = {'A': [1, 1], 'I': [1, 1], 'E': [1, 1], 'O': [1, 1]}
+        self.default_confidence = self.max_confidence
 
     def end_participant(self, subj_id, **kwargs):
-        # print('Finalizing subject', subj_id)
-        # print('   p_entailm:', self.p_entailment)
-        # print('   direction:', self.direction_bias)
-        # print('   o_confide:', self.o_confidence)
-        # print('   max_confi:', self.max_confidence)
-        # print()
-        pass
+        print('Finalizing subject', subj_id)
+        print('   p_entailm:', self.p_entailment)
+        print('   direction:', self.direction_bias)
+        print('   o_confide:', self.o_confidence)
+        print('   max_confi:', self.max_confidence)
+        print()
 
     def pre_train(self, data, **kwargs):
-        return
         dat = []
         for subj_data in data:
             for task_data in subj_data:
@@ -79,6 +81,20 @@ class PHMModel(ccobra.CCobraModel):
             'E': [max_heur_thresholds['E'] * 10, (1 - max_heur_thresholds['E']) * 10],
             'O': [max_heur_thresholds['O'] * 10, (1 - max_heur_thresholds['O']) * 10],
         }
+
+        self.default_confidence = self.max_confidence
+
+    def person_train(self, dataset, **kwargs):
+        for task_data in dataset:
+            item = task_data['item']
+            truth = task_data['response']
+            self.history.append((item, truth))
+
+            if not self.grid_fit:
+                self.adapt_inc(item, truth)
+
+        if self.grid_fit:
+            self.adapt_grid()
 
     def generative_predict(self, item, **kwargs):
         task_enc = ccobra.syllogistic.encode_task(item.task)
@@ -118,8 +134,71 @@ class PHMModel(ccobra.CCobraModel):
         return ccobra.syllogistic.decode_response(pred, item.task)
 
     def adapt(self, item, truth, **kwargs):
-        return
+        self.history.append((item, truth))
 
+        if self.grid_fit:
+            self.adapt_grid()
+        else:
+            self.adapt_inc(item, truth, **kwargs)
+
+    def adapt_grid(self):
+        best_score = 0
+        best_p_ent = 0
+        best_dir_bias = 0
+        best_o_conf = 0
+        best_max_conf = self.default_confidence
+
+        max_confidence_grid = [
+            {'A': [1, 0], 'I': [1, 0], 'E': [1, 0], 'O': [1, 0]},
+            {'A': [1, 0], 'I': [1, 0], 'E': [1, 0], 'O': [0, 1]},
+            {'A': [1, 0], 'I': [1, 0], 'E': [0, 1], 'O': [1, 0]},
+            {'A': [1, 0], 'I': [1, 0], 'E': [0, 1], 'O': [0, 1]},
+            {'A': [1, 0], 'I': [0, 1], 'E': [1, 0], 'O': [1, 0]},
+            {'A': [1, 0], 'I': [0, 1], 'E': [1, 0], 'O': [0, 1]},
+            {'A': [1, 0], 'I': [0, 1], 'E': [0, 1], 'O': [1, 0]},
+            {'A': [1, 0], 'I': [0, 1], 'E': [0, 1], 'O': [0, 1]},
+            {'A': [0, 1], 'I': [1, 0], 'E': [1, 0], 'O': [1, 0]},
+            {'A': [0, 1], 'I': [1, 0], 'E': [1, 0], 'O': [0, 1]},
+            {'A': [0, 1], 'I': [1, 0], 'E': [0, 1], 'O': [1, 0]},
+            {'A': [0, 1], 'I': [1, 0], 'E': [0, 1], 'O': [0, 1]},
+            {'A': [0, 1], 'I': [0, 1], 'E': [1, 0], 'O': [1, 0]},
+            {'A': [0, 1], 'I': [0, 1], 'E': [1, 0], 'O': [0, 1]},
+            {'A': [0, 1], 'I': [0, 1], 'E': [0, 1], 'O': [1, 0]},
+            {'A': [0, 1], 'I': [0, 1], 'E': [0, 1], 'O': [0, 1]}
+        ]
+
+        for p_ent in [1, -1]:
+            for dir_bias in [1, -1]:
+                for o_conf in [1, -1]:
+                    for max_conf in max_confidence_grid:
+                        self.p_entailment = p_ent
+                        self.direction_bias = dir_bias
+                        self.o_confidence = o_conf
+                        self.max_confidence = max_conf
+
+                        score = 0
+                        for elem in self.history:
+                            item = elem[0]
+                            truth = elem[1]
+
+                            pred = self.predict(item)
+
+                            if pred == truth:
+                                score += 1
+
+                        if score >= best_score:
+                            best_score = score
+                            best_p_ent = p_ent
+                            best_dir_bias = dir_bias
+                            best_o_conf = o_conf
+                            best_max_conf = max_conf
+
+        self.p_entailment = best_p_ent
+        self.direction_bias = best_dir_bias
+        self.o_confidence = best_o_conf
+        self.max_confidence = best_max_conf
+
+    def adapt_inc(self, item, truth, **kwargs):
         task_enc = ccobra.syllogistic.encode_task(item.task)
         truth_enc = ccobra.syllogistic.encode_response(truth, item.task)
 
