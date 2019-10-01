@@ -9,8 +9,16 @@ The Probability Heuristics Model (PHM) is a model formalization of the probabili
 
 ### Repository Content
 
-- `phm`: Source code directory for the Python-based PHM implementation.
+- `phm.py`: Implementation of the core PHM functionality
+- `phm_ccobra.py`: Model implementation for use in the [CCOBRA model evaluation framework](https://github.com/CognitiveComputationLab/ccobra).
 
 ### Requirements
 
 - Python 3
+- [numpy](https://numpy.org)
+- [pandas](https://pandas.pydata.org)
+- [ccobra](https://github.com/CognitiveComputationLab/ccobra) (only for `phm_ccobra.py`)
+
+### Testing the model in CCOBRA
+
+To test the model in the CCOBRA model evaluation framework, simply navigate to the online evaluation website [https://orca.informatik.uni-freiburg.de/ccobra/index.php?sel=syl](https://orca.informatik.uni-freiburg.de/ccobra/index.php?sel=syl) and upload the repository content as a `.zip`-file (the evaluation takes around 6 minutes).

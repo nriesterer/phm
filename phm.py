@@ -192,9 +192,7 @@ class PHM():
             warnings.warn(
                 'max-quantifier confidences in incorrect ranking (should be A > I > E ~ O).')
 
-        # Extract the task and conclusion information
-        prem1, prem2 = self.get_premises(task)
-
+        # Apply max-heuristic
         confidences = {
             'A': a_conf,
             'I': i_conf,
@@ -202,7 +200,6 @@ class PHM():
             'O': o_conf
         }
 
-        # Apply max-heuristic
         max_prem = max_premise(task)
         max_conf = confidences[max_prem[0]]
         if max_conf >= 0.5:
