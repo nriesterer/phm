@@ -1,3 +1,21 @@
+import warnings
+
+def max_premise(task):
+    """
+
+    Parameters
+    ----------
+    task : str
+        Task encoding
+
+    """
+
+    ordering = ['O', 'E', 'I', 'A']
+    if ordering.index(task[0]) < ordering.index(task[1]):
+        return task[1]
+    else:
+        return task[0]
+
 class PHM():
     def __init__(self, khemlani_phrase=False):
         """ Initializes PHM by setting up the informativeness order and p_entailment definitions.
@@ -101,15 +119,17 @@ class PHM():
             return [quant + 'ac', quant + 'ca']
         return [quant + subject.replace('A', 'ac').replace('C', 'ca')]
 
-    def predict(self, task_enc):
+    def generate_conclusions(self, task, use_p_entailment):
         """ Computes the list of predictions for a given syllogistic task.
 
         Premises
         --------
-        task_enc : str
+        task : str
             Syllogism to predict for (e.g., "AA1", "AA2", ...). Note that the encodings follow
             the specification of Khemlani & Johnson-Laird (2012) which use different numbers for
             the syllogistic figures.
+
+        use_p_entailment : bool
 
         Returns
         -------
@@ -119,7 +139,7 @@ class PHM():
         """
 
         # Complete the premises
-        prem1, prem2 = self.get_premises(task_enc)
+        prem1, prem2 = self.get_premises(task)
 
         # Determine min and max premise
         min_prem = prem1
@@ -157,18 +177,34 @@ class PHM():
             subject = ''.join(max_prem[1:]).replace('B', '')
 
         # Generate the conclusions
-        min_concls = self.gen_conclusions(min_prem[0], subject)
-        p_ent_concls = self.gen_conclusions(p_ent_quant, subject)
-        return min_concls + p_ent_concls
+        if use_p_entailment:
+            return self.gen_conclusions(p_ent_quant, subject)
+        else:
+            return self.gen_conclusions(min_prem[0], subject)
 
-if __name__ == '__main__':
-    import ccobra
+    def max_heuristic(self, task, a_conf, i_conf, e_conf, o_conf):
+        """
 
-    phm_nokjl = PHM(False)
-    phm_kjl = PHM(True)
+        """
 
-    print('Problem;NoKJL;KJL')
-    for syllog in ccobra.syllogistic.SYLLOGISMS:
-        nokjl = ','.join(phm_nokjl.predict(syllog))
-        kjl = ','.join(phm_kjl.predict(syllog))
-        print(';'.join([syllog, nokjl, kjl, str(nokjl == kjl)]))
+        # Validate that A>I>E~O
+        if not (a_conf >= i_conf >= e_conf) or not (a_conf >= i_conf >= o_conf):
+            warnings.warn(
+                'max-quantifier confidences in incorrect ranking (should be A > I > E ~ O).')
+
+        # Extract the task and conclusion information
+        prem1, prem2 = self.get_premises(task)
+
+        confidences = {
+            'A': a_conf,
+            'I': i_conf,
+            'E': e_conf,
+            'O': o_conf
+        }
+
+        # Apply max-heuristic
+        max_prem = max_premise(task)
+        max_conf = confidences[max_prem[0]]
+        if max_conf >= 0.5:
+            return True
+        return False
