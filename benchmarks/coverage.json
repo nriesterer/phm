@@ -1,0 +1,7 @@
+{
+    "type": "coverage",
+    "data.test": "data/Ragni2016.csv",
+    "models": [
+        "../phm_ccobra.py"
+    ]
+}

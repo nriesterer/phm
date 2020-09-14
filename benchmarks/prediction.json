@@ -1,0 +1,9 @@
+{
+    "type": "prediction",
+    "data.test": "data/Ragni2016.csv",
+    "data.pre_train": "data/Ragni2016.csv",
+    "corresponding_data": true,
+    "models": [
+        "../phm_ccobra.py"
+    ]
+}

@@ -8,118 +8,101 @@ import os
 import phm
 
 class PHMModel(ccobra.CCobraModel):
-    def __init__(self, name='PyPHM', khemlani_phrase=False, direction_bias_enabled=False, no_fit=False):
+    def __init__(self, name='PyPHM', khemlani_phrase=False, no_fit=False, n_samples=4):
         super(PHMModel, self).__init__(name, ['syllogistic'], ['single-choice'])
         self.phm = phm.PHM(khemlani_phrase=khemlani_phrase)
 
         # Member variables
-        self.direction_bias_enabled = direction_bias_enabled
         self.no_fit = no_fit
+        self.n_samples = n_samples
 
         # Individualization parameters
-        self.history = []
+        self.best_param_dicts = []
         self.p_entailment = 0.04316547
-        self.direction_bias = 0
         self.max_confidence = {'A': 0.88489209, 'I': 0.44604317, 'E': 0.25179856, 'O': 0.28776978}
         self.default_confidence = self.max_confidence
 
-    def end_participant(self, subj_id, **kwargs):
+        # Prepare for training
+        self.n_pre_train_dudes = 0
+        self.pre_train_data = np.zeros((64, 9))
+        self.history = np.zeros((64, 9))
+
+    def end_participant(self, subj_id, model_log, **kwargs):
+        model_log['p_entailment'] = self.p_entailment
+        model_log['A_conf'] = self.max_confidence['A']
+        model_log['I_conf'] = self.max_confidence['I']
+        model_log['E_conf'] = self.max_confidence['E']
+        model_log['O_conf'] = self.max_confidence['O']
+        model_log['best_params'] = self.max_confidence
+
         print('Finalizing subject', subj_id)
         print('   p_entailm:', self.p_entailment)
-        print('   direction:', self.direction_bias)
-        print('   max_confi:', self.max_confidence)
+        print('   A_conf   :', self.max_confidence['A'])
+        print('   I_conf   :', self.max_confidence['I'])
+        print('   E_conf   :', self.max_confidence['E'])
+        print('   O_conf   :', self.max_confidence['O'])
         print()
 
-    def pre_train(self, data, **kwargs):
-        if self.no_fit:
-            return
+    def pre_train(self, dataset):
+        """ Pre-trains the model by fitting PHM.
 
-        dat = []
-        for subj_data in data:
+        Parameters
+        ----------
+        dataset : list(list(dict(str, object)))
+            Training data.
+
+        """
+
+        # Extract the training data to fit mReasoner with
+        self.n_pre_train_dudes = len(dataset)
+        self.pre_train_data = np.zeros((64, 9))
+        for subj_data in dataset:
             for task_data in subj_data:
-                enc_task = ccobra.syllogistic.encode_task(task_data['item'].task)
-                enc_resp = ccobra.syllogistic.encode_response(task_data['response'], task_data['item'].task)
+                item = task_data['item']
+                enc_task = ccobra.syllogistic.encode_task(item.task)
+                enc_resp = ccobra.syllogistic.encode_response(task_data['response'], item.task)
 
-                # Obtain max premise
-                max_prem = phm.max_premise(enc_task)
+                task_idx = ccobra.syllogistic.SYLLOGISMS.index(enc_task)
+                resp_idx = ccobra.syllogistic.RESPONSES.index(enc_resp)
+                self.pre_train_data[task_idx, resp_idx] += 1
 
-                # Obtain PHM responses
-                min_concls = self.phm.generate_conclusions(enc_task, False)
-                pent_concls = self.phm.generate_conclusions(enc_task, True)
-                phm_pred = min_concls + pent_concls + ['NVC']
+        div_mask = (self.pre_train_data.sum(axis=1) != 0)
+        self.pre_train_data[div_mask] /= self.pre_train_data[div_mask].sum(axis=1, keepdims=True)
 
-                dat.append({
-                    'subj_id': task_data['item'].identifier,
-                    'syllogism': enc_task,
-                    'response': enc_resp,
-                    'max_prem': max_prem,
-                    'is_phm_pred': enc_resp in phm_pred
-                })
+        # Fit the model
+        self.fit()
 
-        dat_df = pd.DataFrame(dat)
-        dat_df['is_nvc'] = dat_df['response'] == 'NVC'
+    def pre_train_person(self, dataset, **kwargs):
+        """ Perform the person training of mReasoner.
 
-        # Filter phm preds, i.e., only consider responses which lie in the scope of PHM's
-        # predictions. All responses, PHM is unable to produce are ignored.
-        dat_df = dat_df.loc[dat_df['is_phm_pred']]
-        max_heur_thresholds = dict(dat_df.groupby('max_prem')['is_nvc'].agg('mean'))
+        """
 
-        # Max-heuristic confidence values. First tuple value represents weighted proportion of
-        # NVC responses from the pre-training data. Second value denotes the inverse, i.e., the
-        # weighted proportion of non-NVC conclusions.
-        self.max_confidence = {
-            'A': 1 - max_heur_thresholds['A'],
-            'I': 1 - max_heur_thresholds['I'],
-            'E': 1 - max_heur_thresholds['E'],
-            'O': 1 - max_heur_thresholds['O']
-        }
-
-        self.default_confidence = self.max_confidence
-
-    def person_train(self, dataset, **kwargs):
-        if self.no_fit:
-            return
-
+        # Extract the training data to fit mReasoner with
         for task_data in dataset:
             item = task_data['item']
-            truth = task_data['response']
-            self.history.append((item, truth))
+            enc_task = ccobra.syllogistic.encode_task(item.task)
+            enc_resp = ccobra.syllogistic.encode_response(task_data['response'], item.task)
 
-        self.adapt_grid()
+            task_idx = ccobra.syllogistic.SYLLOGISMS.index(enc_task)
+            resp_idx = ccobra.syllogistic.RESPONSES.index(enc_resp)
+            self.history[task_idx, resp_idx] += 1
 
-    def predict(self, item, **kwargs):
-        task_enc = ccobra.syllogistic.encode_task(item.task)
+        # Fit the model
+        self.fit()
 
-        # Obtain predictions
-        use_p_entailment = self.p_entailment >= 0.5
-        preds = self.phm.generate_conclusions(task_enc, use_p_entailment)
+    def fit(self):
+        # Merge the training datasets
+        history_copy = self.history.copy()
+        div_mask = (history_copy.sum(axis=1) != 0)
+        history_copy[div_mask] /= history_copy[div_mask].sum(axis=1, keepdims=True)
 
-        # Apply the possible direction bias
-        pred = np.random.choice(preds)
-        if self.direction_bias_enabled:
-            pred = preds[0]
-            if self.direction_bias < 0 and len(preds) == 2:
-                pred = preds[1]
+        train_data = self.pre_train_data
+        train_data[div_mask] = history_copy[div_mask]
 
-        # Apply max-heuristic
-        if not self.phm.max_heuristic(task_enc, *[self.max_confidence[x] for x in ['A', 'I', 'E', 'O']]):
-            pred = 'NVC'
-
-        return ccobra.syllogistic.decode_response(pred, item.task)
-
-    def adapt(self, item, truth, **kwargs):
-        if self.no_fit:
-            return
-
-        self.history.append((item, truth))
-        self.adapt_grid()
-
-    def adapt_grid(self):
         best_score = 0
-        best_p_ent = 0
-        best_dir_bias = 0
-        best_max_conf = self.default_confidence
+        best_param_dicts = []
 
+        # Iterate over parameters
         max_confidence_grid = [
             {'A': 1, 'I': 1, 'E': 1, 'O': 1},
             {'A': 1, 'I': 1, 'E': 1, 'O': 0},
@@ -129,29 +112,73 @@ class PHMModel(ccobra.CCobraModel):
             {'A': 0, 'I': 0, 'E': 0, 'O': 0}
         ]
 
+        # Prepare the optimization loop
         for p_ent in [1, 0]:
-            for dir_bias in [1, 0]:
-                for max_conf in max_confidence_grid:
-                    self.p_entailment = p_ent
-                    self.direction_bias = dir_bias
-                    self.max_confidence = max_conf
+            for max_conf in max_confidence_grid:
+                param_dict = {
+                    'p_entailment': p_ent,
+                    'max_confidences': max_conf
+                }
 
-                    score = 0
-                    for elem in self.history:
-                        item = elem[0]
-                        truth = elem[1]
+                self.p_entailment = p_ent
+                self.max_confidence = max_conf
 
-                        pred = self.predict(item)
+                # Obtain prediction matrix
+                pred_mat = np.zeros((64, 9))
+                for syl_idx, syllog in enumerate(ccobra.syllogistic.SYLLOGISMS):
+                    for _ in range(self.n_samples):
+                        pred = self._predict(syllog)
+                        pred_idx = ccobra.syllogistic.RESPONSES.index(pred)
+                        pred_mat[syl_idx, pred_idx] += 1
 
-                        if pred == truth:
-                            score += 1
+                pred_mat /= pred_mat.sum(axis=1, keepdims=True)
 
-                    if score >= best_score:
-                        best_score = score
-                        best_p_ent = p_ent
-                        best_dir_bias = dir_bias
-                        best_max_conf = max_conf
+                # Compute score
+                pred_mask = (pred_mat == pred_mat.max(axis=1, keepdims=True))
+                score = np.sum(np.mean(train_data * pred_mask, axis=1))
 
-        self.p_entailment = best_p_ent
-        self.direction_bias = best_dir_bias
-        self.max_confidence = best_max_conf
+                if score > best_score:
+                    best_score = score
+                    best_param_dicts = [param_dict]
+                elif score == best_score:
+                    best_param_dicts.append(param_dict)
+
+        # Store best parameter configurations
+        self.best_param_dicts = best_param_dicts
+
+        # Apply best parameterization
+        rnd_best = best_param_dicts[int(np.random.randint(0, len(best_param_dicts)))]
+        self.p_entailment = rnd_best['p_entailment']
+        self.max_confidence = rnd_best['max_confidences']
+
+    def _predict(self, task_enc):
+        # Obtain predictions
+        use_p_entailment = self.p_entailment >= 0.5
+        preds = self.phm.generate_conclusions(task_enc, use_p_entailment)
+
+        # Apply the possible direction bias
+        pred = np.random.choice(preds)
+
+        # Apply max-heuristic
+        if not self.phm.max_heuristic(task_enc, *[self.max_confidence[x] for x in ['A', 'I', 'E', 'O']]):
+            pred = 'NVC'
+
+        return pred
+
+    def predict(self, item, **kwargs):
+        task_enc = ccobra.syllogistic.encode_task(item.task)
+        pred = self._predict(task_enc)
+        return ccobra.syllogistic.decode_response(pred, item.task)
+
+    def adapt(self, item, truth, **kwargs):
+        # Encode syllogistic information
+        enc_task = ccobra.syllogistic.encode_task(item.task)
+        enc_resp = ccobra.syllogistic.encode_response(truth, item.task)
+
+        # Update history
+        task_idx = ccobra.syllogistic.SYLLOGISMS.index(enc_task)
+        resp_idx = ccobra.syllogistic.RESPONSES.index(enc_resp)
+        self.history[task_idx, resp_idx] += 1
+
+        # Perform training
+        self.fit()
