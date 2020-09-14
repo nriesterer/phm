@@ -8,12 +8,11 @@ import os
 import phm
 
 class PHMModel(ccobra.CCobraModel):
-    def __init__(self, name='PyPHM', khemlani_phrase=False, no_fit=False, n_samples=4):
+    def __init__(self, name='PyPHM', khemlani_phrase=False, n_samples=4):
         super(PHMModel, self).__init__(name, ['syllogistic'], ['single-choice'])
         self.phm = phm.PHM(khemlani_phrase=khemlani_phrase)
 
-        # Member variables
-        self.no_fit = no_fit
+        # Model parameters
         self.n_samples = n_samples
 
         # Individualization parameters
